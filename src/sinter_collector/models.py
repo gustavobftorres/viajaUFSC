@@ -23,6 +23,14 @@ class Notice:
     external_id: str
     title: str
     source_url: str
+    canonical_url: str | None = None
+    kind: str | None = None
+    status: str | None = None
+    program: str | None = None
+    link_text: str | None = None
+    audience: str | None = None
+    application_deadline: str | None = None
+    deadline_text: str | None = None
     body: str | None = None
     published_at: str | None = None
     modified_at: str | None = None
@@ -39,6 +47,11 @@ class Agreement:
     country: str | None
     source_url: str
     details: str | None = None
+    canonical_url: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    agreement_type: str | None = None
+    subject_area: str | None = None
 
     @property
     def record_hash(self) -> str:
