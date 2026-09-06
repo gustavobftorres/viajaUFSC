@@ -47,6 +47,11 @@ class Agreement:
     country: str | None
     source_url: str
     details: str | None = None
+    canonical_url: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    agreement_type: str | None = None
+    subject_area: str | None = None
 
     @property
     def record_hash(self) -> str:

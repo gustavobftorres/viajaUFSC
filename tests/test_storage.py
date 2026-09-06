@@ -51,7 +51,26 @@ def test_agreement_upsert_persists_normalized_fields(tmp_path) -> None:
         country="Portugal",
         source_url="https://example.test/europe",
         details="Acordo geral",
+        canonical_url="https://example.test/university",
+        start_date="2026-01-01",
+        end_date="2031-01-01",
+        agreement_type="bilateral",
+        subject_area="Engenharia",
     )
 
     assert database.upsert_agreement(agreement) is True
     assert database.upsert_agreement(agreement) is False
+
+    with database.connect() as connection:
+        row = connection.execute(
+            "SELECT canonical_url, start_date, end_date, agreement_type, subject_area "
+            "FROM agreements WHERE external_id = ?",
+            (agreement.external_id,),
+        ).fetchone()
+    assert dict(row) == {
+        "canonical_url": "https://example.test/university",
+        "start_date": "2026-01-01",
+        "end_date": "2031-01-01",
+        "agreement_type": "bilateral",
+        "subject_area": "Engenharia",
+    }

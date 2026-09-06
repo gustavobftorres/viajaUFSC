@@ -39,6 +39,11 @@ CREATE TABLE IF NOT EXISTS agreements (
     country TEXT,
     details TEXT,
     source_url TEXT NOT NULL,
+    canonical_url TEXT,
+    start_date TEXT,
+    end_date TEXT,
+    agreement_type TEXT,
+    subject_area TEXT,
     content_hash TEXT NOT NULL,
     first_seen_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -83,6 +88,19 @@ class Database:
             ):
                 if column not in existing:
                     connection.execute(f"ALTER TABLE notices ADD COLUMN {column} TEXT")
+            agreement_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(agreements)").fetchall()
+            }
+            for column in (
+                "canonical_url",
+                "start_date",
+                "end_date",
+                "agreement_type",
+                "subject_area",
+            ):
+                if column not in agreement_columns:
+                    connection.execute(f"ALTER TABLE agreements ADD COLUMN {column} TEXT")
 
     def upsert_notice(self, notice: Notice) -> bool:
         values = {
@@ -112,6 +130,11 @@ class Database:
             "country": agreement.country,
             "details": agreement.details,
             "source_url": agreement.source_url,
+            "canonical_url": agreement.canonical_url,
+            "start_date": agreement.start_date,
+            "end_date": agreement.end_date,
+            "agreement_type": agreement.agreement_type,
+            "subject_area": agreement.subject_area,
             "content_hash": agreement.record_hash,
         }
         return self._upsert("agreements", values)

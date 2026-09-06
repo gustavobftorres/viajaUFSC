@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from .agreements import collect_agreements
 from .http import HttpClient
 from .notices import collect_notices
 from .storage import Database
@@ -23,6 +24,8 @@ def build_parser() -> argparse.ArgumentParser:
     collect = subparsers.add_parser("collect", help="executa um coletor")
     collectors = collect.add_subparsers(dest="collector", required=True)
     collectors.add_parser("notices", help="coleta editais, chamadas e cursos")
+    collectors.add_parser("agreements", help="coleta instituições conveniadas")
+    collectors.add_parser("all", help="executa todos os coletores")
     return parser
 
 
@@ -32,10 +35,21 @@ def main(argv: list[str] | None = None) -> int:
         Database(args.database).initialize()
         print(f"Banco inicializado em {args.database}")
         return 0
-    if args.command == "collect" and args.collector == "notices":
+    if args.command == "collect":
         with HttpClient() as client:
-            changed, unchanged = collect_notices(client, Database(args.database))
-        print(f"Editais processados: {changed} alterados, {unchanged} inalterados")
+            database = Database(args.database)
+            if args.collector in {"notices", "all"}:
+                changed, unchanged = collect_notices(client, database)
+                print(
+                    f"Editais processados: {changed} alterados, "
+                    f"{unchanged} inalterados"
+                )
+            if args.collector in {"agreements", "all"}:
+                changed, unchanged = collect_agreements(client, database)
+                print(
+                    f"Convênios processados: {changed} alterados, "
+                    f"{unchanged} inalterados"
+                )
         return 0
     return 2
 
