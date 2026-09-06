@@ -4,3 +4,9 @@ __pycache__/
 .pytest_cache/
 .venv/
 data/*.db
+.neon
+.env
+.env.*
+!.env.example
+.env.local
+node_modules/
