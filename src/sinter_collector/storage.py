@@ -19,6 +19,14 @@ CREATE TABLE IF NOT EXISTS notices (
     published_at TEXT,
     modified_at TEXT,
     source_url TEXT NOT NULL,
+    canonical_url TEXT,
+    kind TEXT,
+    status TEXT,
+    program TEXT,
+    link_text TEXT,
+    audience TEXT,
+    application_deadline TEXT,
+    deadline_text TEXT,
     content_hash TEXT NOT NULL,
     first_seen_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -59,6 +67,22 @@ class Database:
     def initialize(self) -> None:
         with self.connect() as connection:
             connection.executescript(SCHEMA)
+            existing = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(notices)").fetchall()
+            }
+            for column in (
+                "canonical_url",
+                "kind",
+                "status",
+                "program",
+                "link_text",
+                "audience",
+                "application_deadline",
+                "deadline_text",
+            ):
+                if column not in existing:
+                    connection.execute(f"ALTER TABLE notices ADD COLUMN {column} TEXT")
 
     def upsert_notice(self, notice: Notice) -> bool:
         values = {
@@ -68,6 +92,14 @@ class Database:
             "published_at": notice.published_at,
             "modified_at": notice.modified_at,
             "source_url": notice.source_url,
+            "canonical_url": notice.canonical_url,
+            "kind": notice.kind,
+            "status": notice.status,
+            "program": notice.program,
+            "link_text": notice.link_text,
+            "audience": notice.audience,
+            "application_deadline": notice.application_deadline,
+            "deadline_text": notice.deadline_text,
             "content_hash": notice.record_hash,
         }
         return self._upsert("notices", values)
