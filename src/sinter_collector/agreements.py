@@ -10,6 +10,7 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup, Tag
 
+from .errors import SourceStructureError
 from .http import HttpClient
 from .models import Agreement
 from .storage import Database
@@ -114,6 +115,9 @@ def parse_agreements(
 ) -> list[Agreement]:
     """Parse agreement cards while tolerating optional and misspelled labels."""
     soup = BeautifulSoup(html, "html.parser")
+    # Older snapshots do not always expose the accordion wrapper, so a table
+    # with recognizable card labels remains valid.  The no-results guard below
+    # still makes maintenance/error pages and incompatible markup fail closed.
     scope = soup.find(id="accordiondiv") or soup
     result: list[Agreement] = []
     for table in scope.find_all("table"):
@@ -186,6 +190,10 @@ def parse_agreements(
                 agreement_type=agreement_type,
                 subject_area=subject_area,
             )
+        )
+    if not result:
+        raise SourceStructureError(
+            f"Agreement source {source_url} contains no recognizable agreement cards"
         )
     return result
 

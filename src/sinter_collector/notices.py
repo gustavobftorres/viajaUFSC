@@ -10,6 +10,7 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup, Tag
 
+from .errors import SourceStructureError
 from .http import HttpClient
 from .models import Notice
 from .storage import Database
@@ -88,7 +89,9 @@ def parse_notices(
     content = payload.get("content")
     html = content.get("rendered") if isinstance(content, dict) else None
     if not isinstance(html, str):
-        raise ValueError("WordPress response is missing content.rendered")
+        raise SourceStructureError(
+            f"Notice source {source_url} is missing WordPress content.rendered"
+        )
 
     page_link = payload.get("link") if isinstance(payload.get("link"), str) else source_url
     soup = BeautifulSoup(html, "html.parser")
@@ -164,6 +167,10 @@ def parse_notices(
                     body=" | ".join(body_parts) or None,
                 )
             )
+    if not result:
+        raise SourceStructureError(
+            f"Notice source {source_url} contains no recognizable notice rows"
+        )
     return result
 
 

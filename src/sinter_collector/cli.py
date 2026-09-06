@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 
 from .agreements import collect_agreements
+from .errors import SourceStructureError
 from .http import HttpClient
 from .notices import collect_notices
 from .storage import Database
@@ -36,20 +38,24 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Banco inicializado em {args.database}")
         return 0
     if args.command == "collect":
-        with HttpClient() as client:
-            database = Database(args.database)
-            if args.collector in {"notices", "all"}:
-                changed, unchanged = collect_notices(client, database)
-                print(
-                    f"Editais processados: {changed} alterados, "
-                    f"{unchanged} inalterados"
-                )
-            if args.collector in {"agreements", "all"}:
-                changed, unchanged = collect_agreements(client, database)
-                print(
-                    f"Convênios processados: {changed} alterados, "
-                    f"{unchanged} inalterados"
-                )
+        try:
+            with HttpClient() as client:
+                database = Database(args.database)
+                if args.collector in {"notices", "all"}:
+                    changed, unchanged = collect_notices(client, database)
+                    print(
+                        f"Editais processados: {changed} alterados, "
+                        f"{unchanged} inalterados"
+                    )
+                if args.collector in {"agreements", "all"}:
+                    changed, unchanged = collect_agreements(client, database)
+                    print(
+                        f"Convênios processados: {changed} alterados, "
+                        f"{unchanged} inalterados"
+                    )
+        except SourceStructureError as error:
+            print(f"Erro de estrutura da fonte: {error}", file=sys.stderr)
+            return 1
         return 0
     return 2
 

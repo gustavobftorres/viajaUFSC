@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from sinter_collector.errors import SourceStructureError
 from sinter_collector.notices import (
     NOTICES_API_URL,
     collect_notices,
@@ -77,8 +78,26 @@ def test_parse_notices_normalizes_realistic_wordpress_tables() -> None:
 
 
 def test_parse_notices_requires_rendered_content() -> None:
-    with pytest.raises(ValueError, match="content.rendered"):
+    with pytest.raises(SourceStructureError, match="content.rendered"):
         parse_notices({"content": {}})
+
+
+@pytest.mark.parametrize(
+    "html",
+    [
+        "<main><p>Conteúdo temporariamente indisponível.</p></main>",
+        "<table><tr><th>Programa</th><th>Edital</th></tr></table>",
+        "<table><tr><th>Coluna desconhecida</th></tr><tr><td>Valor</td></tr></table>",
+    ],
+)
+def test_parse_notices_fails_when_page_has_no_recognizable_rows(html: str) -> None:
+    payload = {
+        "link": "https://sinter.ufsc.br/editais-abertos/?lang=pt",
+        "content": {"rendered": html},
+    }
+
+    with pytest.raises(SourceStructureError, match="no recognizable notice rows"):
+        parse_notices(payload)
 
 
 def test_fetch_uses_exact_api_and_requests_json() -> None:

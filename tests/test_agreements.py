@@ -1,11 +1,14 @@
 from pathlib import Path
 
+import pytest
+
 from sinter_collector.agreements import (
     AGREEMENT_PAGES,
     collect_agreements,
     fetch_agreements,
     parse_agreements,
 )
+from sinter_collector.errors import SourceStructureError
 from sinter_collector.storage import Database
 
 
@@ -84,6 +87,24 @@ def test_parser_tolerates_missing_optional_fields_and_unknown_date() -> None:
     assert agreement.end_date is None
     assert agreement.canonical_url is None
     assert agreement.details is None
+
+
+def test_parser_fails_when_maintenance_page_has_no_agreement_structure() -> None:
+    with pytest.raises(SourceStructureError, match="no recognizable agreement cards"):
+        parse_agreements(
+            "<html><body><p>Em manutenção</p></body></html>",
+            continent="Europa",
+            source_url="https://example.test/europa",
+        )
+
+
+def test_parser_fails_when_container_has_no_recognizable_cards() -> None:
+    with pytest.raises(SourceStructureError, match="no recognizable agreement cards"):
+        parse_agreements(
+            '<div id="accordiondiv"><p>Conteúdo temporariamente indisponível</p></div>',
+            continent="Europa",
+            source_url="https://example.test/europa",
+        )
 
 
 def test_parser_infers_specific_type_from_public_description() -> None:
