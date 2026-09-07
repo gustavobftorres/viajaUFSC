@@ -24,3 +24,7 @@ ERROR_RESPONSES = {
     422: {"model": ErrorResponse, "description": "Parâmetros inválidos."},
     500: {"model": ErrorResponse, "description": "Erro interno."},
 }
+
+CATALOG_ERROR_RESPONSES = ERROR_RESPONSES | {
+    503: {"model": ErrorResponse, "description": "Banco de dados não configurado."},
+}

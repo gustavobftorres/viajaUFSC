@@ -1,6 +1,7 @@
 """Fábrica da aplicação FastAPI."""
 
 import logging
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request, status
@@ -10,8 +11,10 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from viajaufsc_api.config import Settings, get_settings
+from viajaufsc_api.db.database import create_database
 from viajaufsc_api.errors import ERROR_RESPONSES, ErrorBody, ErrorResponse
 from viajaufsc_api.routers.health import router as health_router
+from viajaufsc_api.routers.catalog import router as catalog_router
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     """Cria a aplicação configurada, facilitando isolamento nos testes."""
 
     app_settings = settings or get_settings()
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Sem URL, a API ainda expõe health e devolve 503 nas rotas de catálogo;
+        # isso mantém importação/testes locais independentes de serviços externos.
+        database = create_database(app_settings) if app_settings.database_url else None
+        app.state.database = database
+        try:
+            yield
+        finally:
+            if database is not None:
+                await database.dispose()
+
     app = FastAPI(
         title=app_settings.app_name,
         version="0.1.0",
@@ -36,6 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=f"{app_settings.api_v1_prefix}/openapi.json",
         docs_url=f"{app_settings.api_v1_prefix}/docs",
         redoc_url=f"{app_settings.api_v1_prefix}/redoc",
+        lifespan=lifespan,
     )
 
     if app_settings.cors_origins:
@@ -81,6 +97,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     app.include_router(health_router, prefix=app_settings.api_v1_prefix)
+    app.include_router(catalog_router, prefix=app_settings.api_v1_prefix)
     return app
 
 

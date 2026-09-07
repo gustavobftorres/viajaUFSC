@@ -5,11 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import update
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql import func
 
 from viajaufsc_api.db.models import Institution, Opportunity
 
@@ -106,3 +105,79 @@ class SinterRepository:
             .values(**values, updated_at=func.now())
         )
         return UpsertResult(created=False, changed=changed.rowcount == 1)
+
+
+@dataclass(frozen=True, slots=True)
+class PageResult:
+    """Uma página de registros e o total compatível com os filtros."""
+
+    items: list[Opportunity] | list[Institution]
+    total: int
+
+
+class CatalogRepository:
+    """Consultas assíncronas, paginadas e livres de detalhes HTTP."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def list_opportunities(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        status: str | None = None,
+        deadline_from: str | None = None,
+        deadline_to: str | None = None,
+    ) -> PageResult:
+        statement: Select[Any] = select(Opportunity)
+        if status:
+            statement = statement.where(func.lower(Opportunity.status) == status.lower())
+        if deadline_from:
+            statement = statement.where(Opportunity.application_deadline >= deadline_from)
+        if deadline_to:
+            statement = statement.where(Opportunity.application_deadline <= deadline_to)
+        return await self._page(statement, Opportunity, page, page_size)
+
+    async def get_opportunity(self, external_id: str) -> Opportunity | None:
+        return await self.session.get(Opportunity, external_id)
+
+    async def list_institutions(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        continent: str | None = None,
+        country: str | None = None,
+        subject_area: str | None = None,
+        exchange_available: bool | None = None,
+    ) -> PageResult:
+        statement: Select[Any] = select(Institution)
+        if continent:
+            statement = statement.where(func.lower(Institution.continent) == continent.lower())
+        if country:
+            statement = statement.where(func.lower(Institution.country) == country.lower())
+        if subject_area:
+            statement = statement.where(
+                func.lower(Institution.subject_area).contains(subject_area.lower())
+            )
+        if exchange_available is not None:
+            statement = statement.where(Institution.exchange_available == exchange_available)
+        return await self._page(statement, Institution, page, page_size)
+
+    async def get_institution(self, external_id: str) -> Institution | None:
+        return await self.session.get(Institution, external_id)
+
+    async def _page(
+        self,
+        statement: Select[Any],
+        model: type[Opportunity] | type[Institution],
+        page: int,
+        page_size: int,
+    ) -> PageResult:
+        total = await self.session.scalar(
+            select(func.count()).select_from(statement.order_by(None).subquery())
+        )
+        ordered = statement.order_by(model.external_id).offset((page - 1) * page_size).limit(page_size)
+        items = list((await self.session.scalars(ordered)).all())
+        return PageResult(items=items, total=total or 0)
