@@ -1,8 +1,14 @@
 .git
 .github
+.agents
+.env
+.env.*
+.neon
 .pytest_cache
 __pycache__
 *.py[cod]
 *.db
 .venv
+node_modules
+skills-lock.json
 tests

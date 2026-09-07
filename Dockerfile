@@ -1,23 +1,22 @@
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY pyproject.toml requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY apps/api/pyproject.toml ./pyproject.toml
+COPY apps/api/src ./src
+COPY apps/api/alembic.ini ./alembic.ini
+COPY apps/api/alembic ./alembic
 
-COPY src ./src
-RUN pip install --no-cache-dir --no-deps .
+RUN pip install --no-cache-dir . \
+    && addgroup --system viajaufsc \
+    && adduser --system --ingroup viajaufsc --no-create-home viajaufsc \
+    && chown -R viajaufsc:viajaufsc /app
 
-RUN addgroup --system collector \
-    && adduser --system --ingroup collector --no-create-home collector \
-    && mkdir -p /data \
-    && chown collector:collector /data
-VOLUME ["/data"]
+USER viajaufsc
 
-USER collector
+EXPOSE 8000
 
-ENTRYPOINT ["sinter-collector"]
-CMD ["--help"]
+CMD ["python", "-m", "viajaufsc_api.server"]
