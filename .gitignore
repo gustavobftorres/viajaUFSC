@@ -10,3 +10,5 @@ data/*.db
 !.env.example
 .env.local
 node_modules/
+/.agents/
+/skills-lock.json

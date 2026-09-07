@@ -9,22 +9,52 @@ FastAPI; o CLI SQLite original continua disponível para compatibilidade local.
 O projeto somente lê páginas públicas. Ele não autentica, publica ou altera
 conteúdo na UFSC.
 
-## Arquitetura
+## Arquitetura do monorepo
 
 ```text
-CLI (`sinter-collector`)
-  ├── HttpClient: identificação, timeout, intervalo e retries
-  ├── notices: API WordPress → parser de tabelas → Notice
-  ├── agreements: 7 páginas continentais → parser de cards → Agreement
-  └── Database: schema e UPSERT condicional → SQLite
-
-FastAPI / `viajaufsc-collect`
-  └── SQLAlchemy assíncrono → PostgreSQL (Neon)
+viajaUFSC/
+├── apps/
+│   └── api/
+│       ├── src/
+│       │   ├── sinter_collector/  # fetch, parsing e CLI SQLite legado
+│       │   └── viajaufsc_api/     # FastAPI, collector PostgreSQL e acesso a dados
+│       ├── alembic/               # migrations PostgreSQL
+│       ├── tests/                 # testes da API, banco e collector PostgreSQL
+│       ├── .env.example
+│       └── pyproject.toml
+├── tests/                         # testes e fixtures do coletor SINTER
+├── Dockerfile
+├── requirements.txt
+└── requirements-dev.txt
 ```
 
-Os módulos ficam em `apps/api/src/sinter_collector/`. Os coletores recebem um
-cliente HTTP e um banco explicitamente, o que mantém os parsers testáveis com
-fixtures locais e sem acesso à rede.
+O processo `uvicorn` atende HTTP em `/api/v1` e usa SQLAlchemy assíncrono com
+`asyncpg`. O comando `viajaufsc-collect` reutiliza os parsers SINTER e faz UPSERT
+idempotente no mesmo PostgreSQL. O CLI `sinter-collector` mantém o SQLite para
+compatibilidade e desenvolvimento local. Dependências injetáveis e fixtures
+locais permitem testar parsing, API e persistência sem rede.
+
+## API HTTP
+
+Com a aplicação em execução, a documentação interativa fica em
+`http://localhost:8000/api/v1/docs`, o ReDoc em `/api/v1/redoc` e o schema
+OpenAPI em `/api/v1/openapi.json`.
+
+| Método e rota | Finalidade | Filtros |
+| --- | --- | --- |
+| `GET /api/v1/health` | Verifica se o processo está disponível, sem consultar o banco | — |
+| `GET /api/v1/opportunities` | Lista editais/oportunidades | `page`, `page_size`, `status`, `deadline_from`, `deadline_to` |
+| `GET /api/v1/opportunities/{external_id}` | Detalha uma oportunidade | — |
+| `GET /api/v1/institutions` | Lista instituições conveniadas | `page`, `page_size`, `continent`, `country`, `subject_area`, `exchange_available` |
+| `GET /api/v1/institutions/{external_id}` | Detalha uma instituição | — |
+
+As páginas começam em 1, têm 20 itens por padrão e aceitam no máximo 100. Os
+filtros de continente, país e status não diferenciam maiúsculas de minúsculas;
+`subject_area` busca um trecho. Datas usam `AAAA-MM-DD`. Respostas de erro seguem
+o envelope `{"error":{"code":"...","message":"...","details":...}}`.
+Atualmente a SINTER não publica um indicador estruturado de intercâmbio para os
+convênios coletados, portanto `exchange_available` é persistido como nulo até
+que exista uma regra de origem confiável.
 
 ### Fontes públicas
 
@@ -68,12 +98,36 @@ versões anteriores. A migração é aditiva; nenhum dado existente é removido.
 O schema SQLite legado está em `apps/api/src/sinter_collector/storage.py`; o
 schema PostgreSQL é gerenciado pelas migrations em `apps/api/alembic/`.
 
-## Pré-requisitos e instalação
+## Configuração e segredos
+
+Copie apenas os nomes e exemplos seguros de `apps/api/.env.example` para
+`apps/api/.env`; nunca versione o arquivo preenchido. A configuração aceita os
+nomes prefixados abaixo e também `DATABASE_URL`/`DATABASE_URL_UNPOOLED`, como
+gerados pela CLI Neon.
+
+| Variável | Uso |
+| --- | --- |
+| `VIAJAUFSC_DATABASE_URL` | Conexão pooled (host com `-pooler`) da API e do coletor |
+| `VIAJAUFSC_DATABASE_URL_UNPOOLED` | Conexão direta, obrigatória para Alembic |
+| `VIAJAUFSC_CORS_ORIGINS` | Lista JSON de origens React permitidas, por exemplo `["http://localhost:5173"]` |
+
+O pooler da Neon é apropriado para o tráfego normal. Migrations precisam da URL
+direta porque dependem de uma sessão PostgreSQL estável. URLs são normalizadas
+para o driver `asyncpg`; erros de CLI e banco não exibem credenciais. Sem URL de
+banco, o health check continua respondendo e o catálogo retorna HTTP 503.
+
+O scaffold opcional de Function e bucket criado pelo `neon init` foi removido,
+pois esta arquitetura usa somente o PostgreSQL da Neon. As skills Neon ficam
+instaladas localmente em `.agents/` e não fazem parte da aplicação. Nenhum
+serviço Neon adicional foi provisionado.
+
+## Pré-requisitos e instalação local
 
 - Python 3.11 ou superior; ou
 - Docker, para a execução isolada.
 
-Instalação local para uso:
+Instale o pacote único de `apps/api`, que contém tanto a API quanto os dois
+entrypoints do coletor:
 
 ```bash
 python -m venv .venv
@@ -81,12 +135,34 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-Para desenvolver e executar os testes:
+Para desenvolver, instale também as dependências de teste:
 
 ```bash
 python -m pip install -r requirements-dev.txt
-pytest
 ```
+
+Inicie a API na raiz do repositório:
+
+```bash
+uvicorn viajaufsc_api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+### Migrations
+
+Execute o Alembic a partir de `apps/api`, com a conexão direta configurada em
+`apps/api/.env`:
+
+```bash
+cd apps/api
+alembic upgrade head
+alembic current
+```
+
+A migration `20260906_0001` cria `opportunities` e `institutions`, incluindo
+chaves externas estáveis, hashes de conteúdo, timestamps de observação e os
+índices usados pelos filtros do catálogo. Este trabalho não aplicou a migration
+na Neon: faça isso primeiro em uma branch Neon de desenvolvimento e somente
+depois de revisar a URL/projeto selecionados.
 
 ## CLI
 
@@ -115,9 +191,11 @@ dependências e o pacote:
 python -m sinter_collector --database ./data/sinter.db collect all
 ```
 
-Para persistir no PostgreSQL usado pela API, configure `DATABASE_URL` e execute:
+Para persistir no PostgreSQL usado pela API, configure a URL pooled e execute:
 
 ```bash
+viajaufsc-collect notices
+viajaufsc-collect agreements
 viajaufsc-collect all
 ```
 
@@ -198,9 +276,11 @@ execuções concorrentes; se isso for possível no agendador, use um lock extern
 
 ## Testes e fixtures
 
-A suíte não depende da disponibilidade da SINTER. As fixtures em
-`tests/fixtures/` representam a resposta WordPress e cards HTML de convênios;
-clientes falsos exercitam fetch, parsing, persistência e idempotência.
+A suíte é inteiramente offline: não acessa a Neon nem a SINTER real. As fixtures
+em `tests/fixtures/` representam a resposta WordPress e cards HTML de convênios;
+clientes falsos substituem HTTP e SQLite temporário via `aiosqlite` substitui o
+PostgreSQL nos testes de integração. Assim são exercitados fetch, parsing,
+rotas FastAPI, filtros, transações, persistência e idempotência.
 
 ```bash
 pytest
@@ -238,18 +318,20 @@ honre respostas 429 e `Retry-After`. Use apenas os dados públicos necessários,
 preserve `source_url` para auditoria e não tente contornar autenticação,
 bloqueios, rate limits ou controles técnicos.
 
-## Ciclos com revisão independente
+## Commits do backend e revisão independente
 
-Cada fatia abaixo seguiu o mesmo gate: implementação por um agente, revisão
-independente do diff e dos testes por outro agente, correção das críticas e só
-então commit. Os assuntos identificam os ciclos sem depender do hash do próprio
-commit:
+Cada commit abaixo passou pelo gate exigido: implementação por um subagente,
+revisão do diff e dos testes por outro subagente independente, correção dos
+achados relevantes e testes antes do commit.
 
-| Ciclo | Assunto do commit |
-| --- | --- |
-| Foundation | `chore: scaffold collector foundation` |
-| Notices | `feat: collect notices from WordPress API` |
-| Agreements | `feat: collect agreements across seven continents` |
-| Docs/integration | `docs: document and validate collector operations` |
+| Commit | Fatia | Implementação | Revisão independente |
+| --- | --- | --- | --- |
+| `10f65d4` | Fundação FastAPI, configuração, CORS, health e erros | concluída | concluída |
+| `f1d3416` | SQLAlchemy assíncrono, migration inicial e UPSERT idempotente | concluída | concluída |
+| `82e1c8d` | Catálogo paginado, filtros, detalhes e OpenAPI | concluída | concluída |
+| `31f8170` | Monorepo, coletor PostgreSQL, Docker e testes de integração | concluída | concluída |
 
-Nenhuma etapa deste projeto publica ou faz deploy externo.
+Esta documentação também passou por implementação e revisão independentes; seu
+hash é informado no resumo final porque um commit não pode referenciar o próprio
+hash. Nenhuma etapa publicou, fez deploy, abriu PR, executou migration remota ou
+fez merge.
