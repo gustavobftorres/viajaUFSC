@@ -24,6 +24,7 @@ viajaUFSC/
 │       └── pyproject.toml
 ├── tests/                         # testes e fixtures do coletor SINTER
 ├── Dockerfile
+├── render.yaml                    # Blueprint do web service no Render
 ├── requirements.txt
 └── requirements-dev.txt
 ```
@@ -160,9 +161,10 @@ alembic current
 
 A migration `20260906_0001` cria `opportunities` e `institutions`, incluindo
 chaves externas estáveis, hashes de conteúdo, timestamps de observação e os
-índices usados pelos filtros do catálogo. Este trabalho não aplicou a migration
-na Neon: faça isso primeiro em uma branch Neon de desenvolvimento e somente
-depois de revisar a URL/projeto selecionados.
+índices usados pelos filtros do catálogo. Ela já foi aplicada no banco Neon
+selecionado durante a preparação do backend. Para mudanças futuras, execute as
+migrations primeiro em uma branch Neon de desenvolvimento e somente depois de
+revisar a URL e o projeto selecionados.
 
 ## CLI
 
@@ -240,6 +242,41 @@ docker run --rm --env-file apps/api/.env viajaufsc-api viajaufsc-collect all
 
 O container roda como usuário sem privilégios. Use `DATABASE_URL_UNPOOLED` para
 migrations e a URL pooled em `DATABASE_URL` para API e coletor.
+
+## Deploy no Render
+
+O arquivo `render.yaml` define um web service Docker gratuito com health check
+em `/api/v1/health`. O deploy automático fica desligado: cada nova versão deve
+ser iniciada conscientemente pelo painel do Render depois da revisão dos testes
+e das migrations.
+
+Para criar o serviço manualmente pelo Blueprint:
+
+1. Envie a branch revisada para um repositório Git acessível pelo Render.
+2. No painel do Render, escolha **New > Blueprint**, conecte a conta GitHub se
+   necessário, selecione o repositório e a branch e confirme o `render.yaml`.
+3. No campo secreto `DATABASE_URL`, cole a URL **pooled** da Neon (host com
+   `-pooler`). Nunca coloque esse valor no Blueprint, em logs ou no Git.
+4. Enquanto não houver frontend, configure `VIAJAUFSC_CORS_ORIGINS` exatamente
+   como `[]`. Quando o frontend existir, substitua pelo JSON contendo apenas as
+   origens exatas, por exemplo `["https://app.example.com"]`. Não use `*` com
+   credenciais habilitadas.
+5. Crie o serviço, acompanhe o primeiro build e confirme `/api/v1/health` e
+   `/api/v1/docs` na URL pública atribuída pelo Render.
+
+O Render injeta `PORT`; o launcher valida esse valor e usa `8000` somente fora
+da plataforma. O serviço hospedado recebe apenas `DATABASE_URL`. Não configure
+`DATABASE_URL_UNPOOLED` nele: migrations continuam sendo uma etapa separada,
+executada localmente com a URL direta e `alembic upgrade head` antes de liberar
+uma versão que dependa de schema novo.
+
+O plano gratuito é apropriado para demonstração e desenvolvimento: pode
+suspender o serviço após um período sem tráfego, causando latência na primeira
+requisição, e está sujeito à franquia mensal e aos limites atuais de CPU e
+memória do Render. Consulte os limites vigentes antes de usá-lo para tráfego
+crítico. Login/2FA, autorização do GitHub e inserção dos segredos devem ser
+feitos pelo proprietário da conta; as credenciais não devem ser enviadas pelo
+chat.
 
 ### Agendamento com cron
 
@@ -333,5 +370,6 @@ achados relevantes e testes antes do commit.
 
 Esta documentação também passou por implementação e revisão independentes; seu
 hash é informado no resumo final porque um commit não pode referenciar o próprio
-hash. Nenhuma etapa publicou, fez deploy, abriu PR, executou migration remota ou
-fez merge.
+hash. A migration inicial foi aplicada na Neon com autorização e validada antes
+desta documentação. Até este ponto, nenhuma etapa publicou a branch, fez deploy,
+abriu PR ou fez merge.
