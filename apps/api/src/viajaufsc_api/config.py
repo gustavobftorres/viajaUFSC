@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,12 +17,24 @@ class Settings(BaseSettings):
         env_file=API_ROOT / ".env",
         env_prefix="VIAJAUFSC_",
         extra="ignore",
+        populate_by_name=True,
     )
 
     app_name: str = "viajaUFSC API"
     environment: str = "development"
     api_v1_prefix: str = "/api/v1"
-    database_url: str | None = Field(default=None, repr=False)
+    database_url: str | None = Field(
+        default=None,
+        repr=False,
+        validation_alias=AliasChoices("VIAJAUFSC_DATABASE_URL", "DATABASE_URL"),
+    )
+    database_url_unpooled: str | None = Field(
+        default=None,
+        repr=False,
+        validation_alias=AliasChoices(
+            "VIAJAUFSC_DATABASE_URL_UNPOOLED", "DATABASE_URL_UNPOOLED"
+        ),
+    )
     cors_origins: list[str] = Field(default_factory=list)
 
 

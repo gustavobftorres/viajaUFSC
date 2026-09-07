@@ -10,6 +10,9 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from viajaufsc_api.config import get_settings
+from viajaufsc_api.db.database import (
+    migration_database_url,
+)
 from viajaufsc_api.db.models import Base
 
 config = context.config
@@ -20,10 +23,7 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    url = get_settings().database_url
-    if not url:
-        raise RuntimeError("VIAJAUFSC_DATABASE_URL must be configured before running migrations.")
-    return url
+    return migration_database_url(get_settings())
 
 
 def run_migrations_offline() -> None:

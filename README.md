@@ -1,10 +1,10 @@
-# Coletor SINTER/UFSC
+# viajaUFSC
 
 Coletor em Python dos dados públicos de internacionalização publicados pela
 [Secretaria de Relações Internacionais da UFSC (SINTER)](https://sinter.ufsc.br/).
-Ele normaliza editais/chamadas/cursos e convênios internacionais em um banco
-SQLite local, com atualizações idempotentes e execução apropriada para cron ou
-um agendador de containers.
+Ele normaliza editais/chamadas/cursos e convênios internacionais. O backend em
+`apps/api` persiste os dados de forma idempotente no PostgreSQL e os expõe via
+FastAPI; o CLI SQLite original continua disponível para compatibilidade local.
 
 O projeto somente lê páginas públicas. Ele não autentica, publica ou altera
 conteúdo na UFSC.
@@ -17,11 +17,14 @@ CLI (`sinter-collector`)
   ├── notices: API WordPress → parser de tabelas → Notice
   ├── agreements: 7 páginas continentais → parser de cards → Agreement
   └── Database: schema e UPSERT condicional → SQLite
+
+FastAPI / `viajaufsc-collect`
+  └── SQLAlchemy assíncrono → PostgreSQL (Neon)
 ```
 
-Os módulos ficam em `src/sinter_collector/`. Os coletores recebem um cliente
-HTTP e um banco explicitamente, o que mantém os parsers testáveis com fixtures
-locais e sem acesso à rede.
+Os módulos ficam em `apps/api/src/sinter_collector/`. Os coletores recebem um
+cliente HTTP e um banco explicitamente, o que mantém os parsers testáveis com
+fixtures locais e sem acesso à rede.
 
 ### Fontes públicas
 
@@ -62,7 +65,8 @@ versões anteriores. A migração é aditiva; nenhum dado existente é removido.
 | `agreements` | `agreement_type`, `subject_area` | Tipo explícito/inferido e área publicada |
 | `agreements` | `details` | Demais campos públicos do card, concatenados e normalizados |
 
-O schema completo e executável está em `src/sinter_collector/storage.py`.
+O schema SQLite legado está em `apps/api/src/sinter_collector/storage.py`; o
+schema PostgreSQL é gerenciado pelas migrations em `apps/api/alembic/`.
 
 ## Pré-requisitos e instalação
 
@@ -75,20 +79,18 @@ Instalação local para uso:
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip install --no-deps .
 ```
 
 Para desenvolver e executar os testes:
 
 ```bash
 python -m pip install -r requirements-dev.txt
-python -m pip install -e .
 pytest
 ```
 
 ## CLI
 
-O caminho padrão do banco é `/data/sinter.db`, adequado ao container. Em uma
+No CLI SQLite legado, o caminho padrão do banco é `/data/sinter.db`. Em uma
 instalação local, informe um caminho gravável com `--database` (a opção global
 vem antes do subcomando):
 
@@ -113,6 +115,12 @@ dependências e o pacote:
 python -m sinter_collector --database ./data/sinter.db collect all
 ```
 
+Para persistir no PostgreSQL usado pela API, configure `DATABASE_URL` e execute:
+
+```bash
+viajaufsc-collect all
+```
+
 ### Configuração HTTP
 
 | Variável | Padrão | Regra |
@@ -135,31 +143,25 @@ sinter-collector --database ./data/sinter.db collect all
 As novas tentativas usam backoff e respeitam `Retry-After`. Valores explícitos
 passados à API Python de `HttpClient` têm precedência sobre o ambiente.
 
-## Docker e persistência
+## Docker
 
-Construa a imagem e use um volume nomeado montado em `/data`; esse volume
-preserva o SQLite entre containers:
-
-```bash
-docker build -t sinter-ufsc-collector .
-docker volume create sinter-ufsc-data
-docker run --rm -v sinter-ufsc-data:/data sinter-ufsc-collector init-db
-docker run --rm -v sinter-ufsc-data:/data sinter-ufsc-collector collect all
-```
-
-As variáveis HTTP podem ser passadas com `-e`, por exemplo:
+Construa e execute a API FastAPI na porta 8000. Passe segredos somente em tempo
+de execução; eles não são incorporados à imagem:
 
 ```bash
-docker run --rm \
-  -e SINTER_COLLECTOR_DELAY=2 \
-  -e SINTER_COLLECTOR_USER_AGENT='viajaUFSC/0.1 (contato: seu-email@example.com)' \
-  -v sinter-ufsc-data:/data \
-  sinter-ufsc-collector collect all
+docker build -t viajaufsc-api .
+docker run --rm -p 8000:8000 --env-file apps/api/.env viajaufsc-api
 ```
 
-O container roda como usuário sem privilégios. Para bind mounts em vez de um
-volume nomeado, o diretório no host precisa permitir escrita pelo UID/GID do
-usuário `collector` da imagem.
+O mesmo artefato contém o coletor PostgreSQL. Para executá-lo como job, substitua
+o comando padrão:
+
+```bash
+docker run --rm --env-file apps/api/.env viajaufsc-api viajaufsc-collect all
+```
+
+O container roda como usuário sem privilégios. Use `DATABASE_URL_UNPOOLED` para
+migrations e a URL pooled em `DATABASE_URL` para API e coletor.
 
 ### Agendamento com cron
 
@@ -169,14 +171,14 @@ Exemplo local, todos os dias às 06:15, com caminhos absolutos:
 15 6 * * * /opt/viajaufsc/.venv/bin/sinter-collector --database /var/lib/viajaufsc/sinter.db collect all >> /var/log/viajaufsc-collector.log 2>&1
 ```
 
-Exemplo usando Docker e o volume persistente, todos os dias às 06:30:
+Exemplo usando o job PostgreSQL no Docker, todos os dias às 06:30:
 
 ```cron
-30 6 * * * /usr/bin/docker run --rm -v sinter-ufsc-data:/data sinter-ufsc-collector collect all >> /var/log/viajaufsc-collector.log 2>&1
+30 6 * * * /usr/bin/docker run --rm --env-file /opt/viajaufsc/apps/api/.env viajaufsc-api viajaufsc-collect all >> /var/log/viajaufsc-collector.log 2>&1
 ```
 
-O timezone é o do host que executa o cron. Evite execuções concorrentes sobre
-o mesmo SQLite; se isso for possível no agendador, use um lock externo.
+O timezone é o do host que executa o cron. No modo SQLite legado, evite
+execuções concorrentes; se isso for possível no agendador, use um lock externo.
 
 ## Idempotência, hashes e atualizações
 
@@ -202,7 +204,7 @@ clientes falsos exercitam fetch, parsing, persistência e idempotência.
 
 ```bash
 pytest
-python -m compileall -q src tests
+python -m compileall -q apps/api/src tests apps/api/tests
 ```
 
 Os testes cobrem, entre outros casos, URLs relativas, datas inválidas, campos
@@ -219,8 +221,8 @@ aberto para encerrado, atualização de conteúdo e configuração HTTP.
   (`dupla diplomação`, `cotutela` e `acordo específico`).
 - Datas não reconhecidas são preservadas como texto nos convênios e em
   `deadline_text` nos editais, em vez de serem descartadas.
-- SQLite é indicado para uma única rotina/coletor de pequeno porte. O projeto
-  não implementa lock distribuído, exportação, API de consulta ou observabilidade.
+- O modo SQLite legado é indicado apenas para execução local do coletor; a API
+  e o coletor de produção usam PostgreSQL.
 - A identidade por conteúdo normalizado é uma aproximação necessária porque as
   páginas de convênios não expõem um identificador estável por acordo.
 - Para linhas de edital com tipo, URL e programa/título idênticos, o ordinal de
