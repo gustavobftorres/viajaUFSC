@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CATALOG_TIMEOUT_MS, DEFAULT_API_URL, fetchCatalogPreview, getApiBaseUrl, normalizeOpportunity } from "./api";
+import { CATALOG_TIMEOUT_MS, DEFAULT_API_URL, fetchCatalogPreview, fetchOpportunities, fetchOpportunity, getApiBaseUrl, normalizeOpportunity } from "./api";
 
 describe("API client", () => {
   it("uses only valid HTTP origins", () => {
@@ -40,5 +40,18 @@ describe("API client", () => {
     await expect(fetchCatalogPreview({ fetcher, signalFactory })).resolves.toBeNull();
     expect(signalFactory).toHaveBeenCalledWith(CATALOG_TIMEOUT_MS);
     expect(fetcher).toHaveBeenCalled();
+  });
+
+  it("serializes supported opportunity filters and normalizes pagination", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [{ external_id: "notice/1", title: "Chamada", source_url: "https://sinter.ufsc.br/notice" }], page: 2, page_size: 12, total: 18 }), { status: 200 }));
+    await expect(fetchOpportunities({ page: 2, status: "open", deadlineFrom: "2026-09-01", deadlineTo: "2026-12-31" }, { fetcher })).resolves.toMatchObject({ page: 2, pageSize: 12, total: 18, items: [expect.objectContaining({ externalId: "notice/1", sourceUrl: "https://sinter.ufsc.br/notice" })] });
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain("opportunities?page=2&page_size=12&status=open&deadline_from=2026-09-01&deadline_to=2026-12-31");
+  });
+
+  it("loads encoded opportunity details and preserves an HTTP error status", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ external_id: "edital/1", title: "Edital", canonical_url: "javascript:alert(1)" }), { status: 200 })).mockResolvedValueOnce(new Response(null, { status: 404 }));
+    await expect(fetchOpportunity("edital/1", { fetcher })).resolves.toMatchObject({ externalId: "edital/1", canonicalUrl: null });
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain("opportunities/edital%2F1");
+    await expect(fetchOpportunity("missing", { fetcher })).rejects.toMatchObject({ name: "ApiError", status: 404 });
   });
 });
