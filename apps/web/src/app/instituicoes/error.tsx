@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 
 export default function InstitutionsError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <main className="flex min-h-screen items-center bg-[#050b18] px-5 text-white">
+    <main id="conteudo" className="flex min-h-screen items-center bg-[#050b18] px-5 text-white">
       <div className="mx-auto max-w-xl text-center">
         <AlertTriangle aria-hidden="true" className="mx-auto size-8 text-amber-300" />
         <h1 className="mt-6 font-heading text-4xl">Não foi possível abrir o catálogo.</h1>

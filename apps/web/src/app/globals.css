@@ -151,6 +151,10 @@
   .eyebrow {
     @apply text-sm font-semibold tracking-[0.18em] text-sky-300 uppercase;
   }
+
+  .skip-link {
+    @apply fixed top-3 left-3 z-50 -translate-y-20 rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg transition-transform focus:translate-y-0 focus:outline-none focus:ring-2 focus:ring-sky-300 focus:ring-offset-2 focus:ring-offset-slate-950;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

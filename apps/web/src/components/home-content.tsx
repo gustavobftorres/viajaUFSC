@@ -17,7 +17,6 @@ const faqs = [
 export function HomeContent({ catalog }: { catalog: ReactNode }) {
   return (
     <div className="min-h-screen overflow-hidden bg-[#050b18] text-slate-100">
-      <a href="#conteudo" className="fixed left-4 top-3 z-50 -translate-y-20 rounded-md bg-white px-4 py-2 text-sm font-medium text-slate-950 focus:translate-y-0">Pular para o conteúdo</a>
       <SiteHeader />
       <main id="conteudo">
         <section className="grid-field relative px-5 pb-16 pt-20 sm:pt-24 lg:px-8 lg:pb-24 lg:pt-32">

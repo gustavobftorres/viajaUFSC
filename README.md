@@ -22,7 +22,11 @@ viajaUFSC/
 │   │   ├── tests/                 # testes da API, banco e collector PostgreSQL
 │   │   ├── .env.example
 │   │   └── pyproject.toml
-│   └── web/                       # Next.js, Tailwind e shadcn/ui
+│   └── web/
+│       ├── src/app/               # rotas e estados do Next.js App Router
+│       ├── src/components/        # composição e componentes shadcn/ui
+│       ├── src/lib/               # cliente da API, normalização e filtros
+│       └── .env.example           # origens públicas configuráveis
 ├── tests/                         # testes e fixtures do coletor SINTER
 ├── Dockerfile
 ├── render.yaml                    # Blueprint do web service no Render
@@ -32,9 +36,19 @@ viajaUFSC/
 
 ## Frontend
 
-O frontend fica em `apps/web` e consome a API pública por meio de
-`NEXT_PUBLIC_API_URL`. Copie `apps/web/.env.example` para `apps/web/.env.local`
-somente quando precisar trocar a origem padrão.
+O frontend fica em `apps/web` e usa Next.js App Router, TypeScript, Tailwind CSS
+e componentes shadcn/ui. A leitura da API ocorre nos Server Components; filtros
+e paginação são representados na URL, permitindo compartilhar uma consulta e
+mantendo o cliente leve. Os payloads externos são validados e normalizados em
+`src/lib/api.ts` antes de chegar aos componentes.
+
+Copie `apps/web/.env.example` para `apps/web/.env.local` somente quando precisar
+trocar uma origem. Arquivos `.env*` preenchidos não devem ser versionados.
+
+| Variável | Uso | Padrão quando vazia |
+| --- | --- | --- |
+| `NEXT_PUBLIC_API_URL` | Origem HTTP da API FastAPI | API pública do viajaUFSC no Render |
+| `NEXT_PUBLIC_SITE_URL` | Origem pública do frontend para metadados absolutos | Metadados sem domínio inventado |
 
 ```bash
 npm install
@@ -44,7 +58,24 @@ npm run web:lint
 npm run web:build
 ```
 
-O servidor local do Next.js fica em `http://localhost:3000`.
+Os aliases `npm test`, `npm run lint` e `npm run build` executam a mesma suíte do
+workspace web. O servidor local do Next.js fica em `http://localhost:3000`.
+
+### Rotas do frontend
+
+| Rota | Conteúdo |
+| --- | --- |
+| `/` | Landing page e prévia do catálogo |
+| `/oportunidades` | Oportunidades paginadas, com status e período de prazo |
+| `/oportunidades/{id}` | Detalhe e link para a fonte de uma oportunidade |
+| `/instituicoes` | Convênios paginados por continente, país, área e disponibilidade |
+| `/instituicoes/{id}` | Detalhe, proveniência e vigência de um convênio |
+| `/sobre-os-dados` | Fonte, pipeline, atualização e limitações do catálogo |
+
+O app também possui estados de carregamento, erro e não encontrado coerentes
+com a interface. A navegação oferece um atalho para o conteúdo principal e menu
+móvel acessível. **O frontend ainda não foi publicado**; não há configuração de
+deploy do app web neste repositório.
 
 O processo `uvicorn` atende HTTP em `/api/v1` e usa SQLAlchemy assíncrono com
 `asyncpg`. O comando `viajaufsc-collect` reutiliza os parsers SINTER e faz UPSERT
@@ -345,6 +376,17 @@ Os testes cobrem, entre outros casos, URLs relativas, datas inválidas, campos
 opcionais, instituições duplicadas, reordenação de cards, transição de edital
 aberto para encerrado, atualização de conteúdo e configuração HTTP.
 
+Os testes do frontend usam Vitest e Testing Library, sem depender da Neon ou da
+SINTER real. Eles cobrem normalização do contrato da API, filtros, paginação,
+cards, navegação móvel, estados globais e conteúdo de transparência. A validação
+de cada ciclo inclui também ESLint, build de produção e `git diff --check`:
+
+```bash
+npm test
+npm run lint
+npm run build
+```
+
 ## Limites conhecidos
 
 - O coletor reflete o HTML/JSON disponível no momento. Mudanças estruturais no
@@ -388,5 +430,22 @@ achados relevantes e testes antes do commit.
 Esta documentação também passou por implementação e revisão independentes; seu
 hash é informado no resumo final porque um commit não pode referenciar o próprio
 hash. A migration inicial foi aplicada na Neon com autorização e validada antes
-desta documentação. Até este ponto, nenhuma etapa publicou a branch, fez deploy,
-abriu PR ou fez merge.
+desta documentação. Depois desses ciclos, o backend foi revisado, integrado à
+`main` e publicado no Render; isso não inclui o frontend.
+
+## Commits do frontend e revisão independente
+
+Cada ciclo abaixo seguiu o mesmo gate: implementação por um subagente, validação
+funcional e visual por outro subagente independente, correção dos achados e nova
+execução dos testes antes do commit.
+
+| Commit | Fatia | Implementação | Validação funcional e visual |
+| --- | --- | --- | --- |
+| `941ca2d` | Next.js, shadcn/ui, landing page e integração inicial | concluída | concluída |
+| `37627c6` | Catálogo e detalhe de oportunidades | concluída | concluída |
+| `e79c59a` | Catálogo e detalhe de instituições/convênios | concluída | concluída |
+| este commit (hash no resumo final) | Transparência, acessibilidade, SEO e estados globais | concluída | concluída |
+
+Esses commits pertencem à branch local de frontend criada a partir de
+`development`. O app web ainda não foi publicado, e nenhum deploy deve ser
+inferido a partir do deploy já existente da API.
