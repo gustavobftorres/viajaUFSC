@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CATALOG_TIMEOUT_MS, DEFAULT_API_URL, fetchCatalogPreview, fetchOpportunities, fetchOpportunity, getApiBaseUrl, normalizeOpportunity } from "./api";
+import { CATALOG_TIMEOUT_MS, DEFAULT_API_URL, fetchCatalogPreview, fetchInstitution, fetchInstitutions, fetchOpportunities, fetchOpportunity, getApiBaseUrl, normalizeInstitution, normalizeOpportunity } from "./api";
 
 describe("API client", () => {
   it("uses only valid HTTP origins", () => {
@@ -53,5 +53,43 @@ describe("API client", () => {
     await expect(fetchOpportunity("edital/1", { fetcher })).resolves.toMatchObject({ externalId: "edital/1", canonicalUrl: null });
     expect(String(fetcher.mock.calls[0]?.[0])).toContain("opportunities/edital%2F1");
     await expect(fetchOpportunity("missing", { fetcher })).rejects.toMatchObject({ name: "ApiError", status: 404 });
+  });
+
+  it("normalizes agreement records without trusting source URLs or availability types", () => {
+    expect(normalizeInstitution({
+      external_id: " agreement/1 ",
+      name: " Universidade Exemplo ",
+      continent: " Europa ",
+      country: "Portugal",
+      subject_area: "Engenharia",
+      exchange_available: true,
+      source_url: "https://sinter.ufsc.br/convenios",
+      canonical_url: "javascript:alert(1)",
+    })).toMatchObject({
+      externalId: "agreement/1",
+      name: "Universidade Exemplo",
+      continent: "Europa",
+      exchangeAvailable: true,
+      canonicalUrl: null,
+    });
+    expect(normalizeInstitution({ external_id: "1", name: "Sem continente" })).toBeNull();
+  });
+
+  it("serializes institution filters and loads encoded details", async () => {
+    const payload = { external_id: "agreement/1", name: "Universidade Exemplo", continent: "Europa", source_url: "https://sinter.ufsc.br/convenios" };
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [payload], page: 2, page_size: 12, total: 14 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(payload), { status: 200 }));
+
+    await expect(fetchInstitutions({ page: 2, continent: "Europa", country: "Portugal", subjectArea: "Engenharia Civil", exchangeAvailable: false }, { fetcher })).resolves.toMatchObject({ page: 2, pageSize: 12, total: 14, items: [expect.objectContaining({ externalId: "agreement/1" })] });
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain("institutions?page=2&page_size=12&continent=Europa&country=Portugal&subject_area=Engenharia+Civil&exchange_available=false");
+
+    await expect(fetchInstitution("agreement/1", { fetcher })).resolves.toMatchObject({ name: "Universidade Exemplo" });
+    expect(String(fetcher.mock.calls[1]?.[0])).toContain("institutions/agreement%2F1");
+  });
+
+  it("preserves a missing institution status for the detail route", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
+    await expect(fetchInstitution("missing", { fetcher })).rejects.toMatchObject({ name: "ApiError", status: 404 });
   });
 });

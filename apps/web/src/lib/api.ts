@@ -35,6 +35,39 @@ export type OpportunityPage = {
   total: number;
 };
 
+export type Institution = {
+  externalId: string;
+  name: string;
+  continent: string;
+  country: string | null;
+  details: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  agreementType: string | null;
+  subjectArea: string | null;
+  exchangeAvailable: boolean | null;
+  sourceUrl: string | null;
+  canonicalUrl: string | null;
+  firstSeenAt: string | null;
+  updatedAt: string | null;
+};
+
+export type InstitutionFilters = {
+  page?: number;
+  pageSize?: number;
+  continent?: string;
+  country?: string;
+  subjectArea?: string;
+  exchangeAvailable?: boolean;
+};
+
+export type InstitutionPage = {
+  items: Institution[];
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
 export type CatalogPreview = {
   opportunities: Opportunity[];
   opportunityTotal: number;
@@ -105,6 +138,30 @@ export function normalizeOpportunity(value: unknown): Opportunity | null {
   };
 }
 
+export function normalizeInstitution(value: unknown): Institution | null {
+  if (!isRecord(value) || typeof value.external_id !== "string" || typeof value.name !== "string" || typeof value.continent !== "string") return null;
+  const externalId = value.external_id.trim();
+  const name = value.name.trim();
+  const continent = value.continent.trim();
+  if (!externalId || !name || !continent) return null;
+  return {
+    externalId,
+    name,
+    continent,
+    country: optionalString(value.country),
+    details: optionalString(value.details),
+    startDate: optionalString(value.start_date),
+    endDate: optionalString(value.end_date),
+    agreementType: optionalString(value.agreement_type),
+    subjectArea: optionalString(value.subject_area),
+    exchangeAvailable: typeof value.exchange_available === "boolean" ? value.exchange_available : null,
+    sourceUrl: optionalHttpUrl(value.source_url),
+    canonicalUrl: optionalHttpUrl(value.canonical_url),
+    firstSeenAt: optionalString(value.first_seen_at),
+    updatedAt: optionalString(value.updated_at),
+  };
+}
+
 function normalizePage(value: unknown): ApiPage | null {
   if (!isRecord(value) || !Array.isArray(value.items) || typeof value.total !== "number" || !Number.isFinite(value.total) || value.total < 0) return null;
   return { items: value.items, total: value.total };
@@ -115,6 +172,17 @@ function normalizeOpportunityPage(value: unknown): OpportunityPage | null {
   if (!page || !isRecord(value) || typeof value.page !== "number" || !Number.isInteger(value.page) || value.page < 1 || typeof value.page_size !== "number" || !Number.isInteger(value.page_size) || value.page_size < 1) return null;
   return {
     items: page.items.map(normalizeOpportunity).filter((item): item is Opportunity => item !== null),
+    page: value.page,
+    pageSize: value.page_size,
+    total: page.total,
+  };
+}
+
+function normalizeInstitutionPage(value: unknown): InstitutionPage | null {
+  const page = normalizePage(value);
+  if (!page || !isRecord(value) || typeof value.page !== "number" || !Number.isInteger(value.page) || value.page < 1 || typeof value.page_size !== "number" || !Number.isInteger(value.page_size) || value.page_size < 1) return null;
+  return {
+    items: page.items.map(normalizeInstitution).filter((item): item is Institution => item !== null),
     page: value.page,
     pageSize: value.page_size,
     total: page.total,
@@ -185,6 +253,26 @@ export async function fetchOpportunity(externalId: string, options: RequestOptio
   const opportunity = normalizeOpportunity(await getJson(`opportunities/${encodeURIComponent(externalId)}`, options));
   if (!opportunity) throw new ApiError("O catálogo retornou uma oportunidade inválida.");
   return opportunity;
+}
+
+export async function fetchInstitutions(
+  filters: InstitutionFilters = {},
+  options: RequestOptions = {},
+): Promise<InstitutionPage> {
+  const params = new URLSearchParams({ page: String(filters.page ?? 1), page_size: String(filters.pageSize ?? 12) });
+  if (filters.continent) params.set("continent", filters.continent);
+  if (filters.country) params.set("country", filters.country);
+  if (filters.subjectArea) params.set("subject_area", filters.subjectArea);
+  if (typeof filters.exchangeAvailable === "boolean") params.set("exchange_available", String(filters.exchangeAvailable));
+  const page = normalizeInstitutionPage(await getJson(`institutions?${params}`, options));
+  if (!page) throw new ApiError("O catálogo retornou uma página de convênios inválida.");
+  return page;
+}
+
+export async function fetchInstitution(externalId: string, options: RequestOptions = {}): Promise<Institution> {
+  const institution = normalizeInstitution(await getJson(`institutions/${encodeURIComponent(externalId)}`, options));
+  if (!institution) throw new ApiError("O catálogo retornou um convênio inválido.");
+  return institution;
 }
 
 export async function fetchCatalogPreview({
