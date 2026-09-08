@@ -14,20 +14,37 @@ conteúdo na UFSC.
 ```text
 viajaUFSC/
 ├── apps/
-│   └── api/
-│       ├── src/
-│       │   ├── sinter_collector/  # fetch, parsing e CLI SQLite legado
-│       │   └── viajaufsc_api/     # FastAPI, collector PostgreSQL e acesso a dados
-│       ├── alembic/               # migrations PostgreSQL
-│       ├── tests/                 # testes da API, banco e collector PostgreSQL
-│       ├── .env.example
-│       └── pyproject.toml
+│   ├── api/
+│   │   ├── src/
+│   │   │   ├── sinter_collector/  # fetch, parsing e CLI SQLite legado
+│   │   │   └── viajaufsc_api/     # FastAPI, collector PostgreSQL e acesso a dados
+│   │   ├── alembic/               # migrations PostgreSQL
+│   │   ├── tests/                 # testes da API, banco e collector PostgreSQL
+│   │   ├── .env.example
+│   │   └── pyproject.toml
+│   └── web/                       # Next.js, Tailwind e shadcn/ui
 ├── tests/                         # testes e fixtures do coletor SINTER
 ├── Dockerfile
 ├── render.yaml                    # Blueprint do web service no Render
 ├── requirements.txt
 └── requirements-dev.txt
 ```
+
+## Frontend
+
+O frontend fica em `apps/web` e consome a API pública por meio de
+`NEXT_PUBLIC_API_URL`. Copie `apps/web/.env.example` para `apps/web/.env.local`
+somente quando precisar trocar a origem padrão.
+
+```bash
+npm install
+npm run web:dev
+npm run web:test
+npm run web:lint
+npm run web:build
+```
+
+O servidor local do Next.js fica em `http://localhost:3000`.
 
 O processo `uvicorn` atende HTTP em `/api/v1` e usa SQLAlchemy assíncrono com
 `asyncpg`. O comando `viajaufsc-collect` reutiliza os parsers SINTER e faz UPSERT

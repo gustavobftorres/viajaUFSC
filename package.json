@@ -1,0 +1,16 @@
+{
+  "name": "viajaufsc",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "test": "npm run web:test",
+    "lint": "npm run web:lint",
+    "build": "npm run web:build",
+    "web:dev": "npm run dev --workspace web",
+    "web:build": "npm run build --workspace web",
+    "web:lint": "npm run lint --workspace web",
+    "web:test": "npm run test --workspace web"
+  }
+}
